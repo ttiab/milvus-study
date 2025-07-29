@@ -1,2 +1,6 @@
 pymilvus==2.5.1
 marshmallow>=3.20.1,<4.0
+numpy~=2.3.2
+torch~=2.7.1
+pillow~=11.3.0
+sentence-transformers==5.0.0
