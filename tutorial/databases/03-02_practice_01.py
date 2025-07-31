@@ -27,7 +27,7 @@ fields = [
     FieldSchema(name="id", dtype=DataType.INT64, is_primary=True, auto_id=True),
     FieldSchema(name="title", dtype=DataType.VARCHAR, max_length=500),
     FieldSchema(name="content", dtype=DataType.VARCHAR, max_length=2000),
-    FieldSchema(name="vector", dtype=DataType.FLOAT_VECTOR, dim=384),
+    FieldSchema(name="vector", dtype=DataType.FLOAT_VECTOR, dim=768),
     FieldSchema(name="category", dtype=DataType.VARCHAR, max_length=100),
     FieldSchema(name="author", dtype=DataType.VARCHAR, max_length=100),
     FieldSchema(name="score", dtype=DataType.FLOAT)
@@ -103,11 +103,13 @@ articles = [
 
 # 벡터 변환을 위한 유틸리티 초기화
 vector_utils = VectorUtils()
+vector_utils.load_text_model("jhgan/ko-sroberta-multitask")
+
 
 # 제목과 내용을 결합하여 벡터 변환
 combined_texts = [f"{article['title']} {article['content']}" for article in articles]
 print(combined_texts)
-vectors = vector_utils.texts_to_vectors(combined_texts)
+vectors = vector_utils.texts_to_vectors(combined_texts, normalize=True)
 time.sleep(10)
 
 print(vectors)
@@ -116,7 +118,7 @@ print(len(vectors))
 i = 0
 for article in articles:
     article["vector"] = vectors[i]
-    i = i+1
+    i = i + 1
 
 print(f"  ✅ {len(articles)}개 문서 데이터 준비 완료")
 print(f"  ✅ {articles[0]['vector']}")
@@ -129,3 +131,120 @@ client.flush(collection_name=collection_name)
 
 print(insert)
 
+"""
+인덱스 생성
+"""
+
+"""인덱스 생성 데모"""
+
+# Prepare index building params
+index_params = MilvusClient.prepare_index_params()
+
+index_params.add_index(
+    index_type="IVF_FLAT",  # Name of the vector field to be indexed
+    field_name="vector",  # Type of the index to create
+    index_name="vector_index",  # Name of the index to create
+    metric_type="COSINE",  # Metric type used to measure similarity
+    params={
+        "nlist": 128,  # Number of clusters for the index
+    }  # Index building params
+)
+
+
+client.create_index(
+    collection_name=collection_name,
+    index_params=index_params,
+)
+
+
+print(client.list_indexes(collection_name=collection_name))
+
+
+"""
+기본 검색
+"""
+
+client.load_collection(collection_name=collection_name)
+
+# 검색 쿼리들
+queries = [
+    "인공지능과 기계학습 기술",
+    "비즈니스 전략과 경영",
+    "과학 기술과 연구",
+    "클라우드 컴퓨팅과 데이터"
+]
+
+for i, query_text in enumerate(queries):
+    print(f"\n{i + 2}. 검색 쿼리: '{query_text}'")
+
+    # 쿼리 벡터 생성
+    query_vectors = vector_utils.text_to_vector(query_text)
+    query_vector = query_vectors[0] if len(query_vectors.shape) > 1 else query_vectors
+
+    search_params = {
+        "params": {
+            "nprobe": 10,  # Number of clusters to search
+        }
+    }
+
+    results = client.search(
+        collection_name=collection_name,  # Collection name
+        anns_field="vector",
+        data=[query_vector],  # Query vector
+        limit=3,  # TopK results to return
+        search_params=search_params,
+        output_fields = ["title", "category", "author", "score"]
+
+    )
+
+    # 검색 실행
+    start_time = time.time()
+
+
+    # results = collection.search(
+    #     data=[query_vector],
+    #     anns_field="vector",
+    #     param=search_params,
+    #     limit=3,
+    #     output_fields=["title", "category", "author", "score"]
+    # )
+
+    search_time = time.time() - start_time
+    print(f"  검색 시간: {search_time:.4f}초")
+    print(f"  검색 결과 수: {len(results[0])}")
+
+    print(results)
+    # 결과 출력
+    for j, hit in enumerate(results[0]):
+        print(f"    {j + 1}. {hit['entity']['title']}")
+        print(f"        카테고리: {hit['entity']['category']}")
+        print(f"        저자: {hit['entity']['author']}")
+        print(f"        점수: {hit['entity']['score']}")
+        print(f"        유사도 거리: {hit['distance']:.4f}")
+
+"""
+필터링 검색
+"""
+
+query_text = "최신 기술 동향"
+query_vectors = vector_utils.text_to_vector(query_text)
+query_vector = query_vectors[0] if len(query_vectors.shape) > 1 else query_vectors
+search_params = {
+    "params": {
+        "nprobe": 10,  # Number of clusters to search
+    }
+}
+results = client.search(
+    collection_name=collection_name,  # Collection name
+    anns_field="vector",
+    data=[query_vector],  # Query vector
+    limit=3,  # TopK results to return
+    search_params=search_params,
+    filter='category like "Business" ',
+    output_fields=["title", "category", "author", "score"]
+
+)
+for hits in results:
+    print("TopK results:")
+    for hit in hits:
+        print(hit)

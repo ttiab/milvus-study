@@ -52,14 +52,3 @@ client.drop_database_properties(
         "database.max.collections"
     ]
 )
-
-# API 가 아직 안나옴
-# # DB 사용
-# client.use_database(
-#     db_name="my_database_2"
-# )
-#
-# # DB 삭제
-# client.drop_database(
-#     db_name="my_database_2"
-# )

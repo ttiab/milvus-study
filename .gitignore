@@ -1,3 +1,6 @@
-volumes/
-venv/
+*volumes/
+*venv/
 *.dylib
+*.DS_Store
+*misc.xml
+*.idea
